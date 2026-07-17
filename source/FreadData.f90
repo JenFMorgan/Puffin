@@ -125,6 +125,9 @@ subroutine read_in(zfilename, &
        LattFile,&
        iWriteNthSteps, &
        iWriteIntNthSteps, &
+       iwakefieldNthSteps, &
+       ispacechargeNthSteps, &
+       icurrsamp, &
        tArrayZ, &
        tArrayA, &
        tArrayVariables, &
@@ -183,6 +186,8 @@ subroutine read_in(zfilename, &
   REAL(KIND=WP) ,    INTENT(OUT)  :: sZ0
   CHARACTER(1024_IP),  INTENT(INOUT):: LattFile
   INTEGER(KIND=IP),  INTENT(OUT)  :: iWriteNthSteps, iWriteIntNthSteps
+  INTEGER(KIND=IP),  INTENT(OUT)  :: iwakefieldNthSteps, ispacechargeNthSteps
+  REAL(KIND=WP), INTENT(OUT)   :: icurrsamp
   TYPE(cArraySegment)             :: tArrayZ
   TYPE(cArraySegment)             :: tArrayA(:)
   TYPE(cArraySegment)             :: tArrayVariables(:)
@@ -251,7 +256,7 @@ subroutine read_in(zfilename, &
   logical :: qOneD, qFieldEvolve, qElectronsEvolve, &
              qElectronFieldCoupling, qFocussing, &
              qDiffraction, qDump, qUndEnds, qhdf5, qsdds, &
-             qscaled, qInitWrLat, qDumpEnd
+             qscaled, qInitWrLat, qDumpEnd, qwake, qspacecharge
 
   integer(kind=ip) :: iNumNodesX, iNumNodesY, nodesPerLambdar
   real(kind=wp) :: sFModelLengthX, sFModelLengthY, sFModelLengthZ2
@@ -291,6 +296,8 @@ namelist /mdata/ qOneD, qFieldEvolve, qElectronsEvolve, &
                  LattFile, stepsPerPeriod, nPeriods, &
                  sZ0, zDataFileName, iWriteNthSteps, &
                  iWriteIntNthSteps, &
+                 iwakefieldNthSteps, ispacechargeNthSteps, icurrsamp,&
+                 qwake, qspacecharge, & 
                  qFMesh_G, sKBetaXSF, sKBetaYSF, sRedistLen, &
                  iRedistStp, qscaled, nspinDX, nspinDY, qInitWrLat, qDumpEnd, &
                  wr_file, qMeasure, DFact, iDumpNthSteps, speout, meshType, &
@@ -331,6 +338,8 @@ namelist /mdata/ qOneD, qFieldEvolve, qElectronsEvolve, &
   qhdf5 = .true.
   qFMesh_G = .true.
   qscaled = .true.
+  qwake = .false.
+  qspacecharge=.false.
   qInitWrLat = .false.
   qDumpEnd = .true.
   qMeasure = .true.
@@ -373,6 +382,9 @@ namelist /mdata/ qOneD, qFieldEvolve, qElectronsEvolve, &
   zDataFileName          = ''
   iWriteNthSteps         = 30
   iWriteIntNthSteps      = 30
+  iwakefieldNthSteps     = 30 
+  ispacechargeNthSteps   = 30
+  icurrsamp = 1.0
   meshType = 0_ip
   sKBetaXSF = -0.1_wp
   sKBetaYSF = -0.1_wp
@@ -401,6 +413,17 @@ namelist /mdata/ qOneD, qFieldEvolve, qElectronsEvolve, &
   qUndEnds_G = qUndEnds
   qhdf5_G = qhdf5
   qscaled_G = qscaled
+  qwake_G = qwake
+  qspacecharge_G = qspacecharge
+
+
+  if (qspacecharge_G) then
+     print *, 'ERROR: Space charge is not yet implemented in this version of Puffin.'
+     print *, 'Please set qspacecharge = .false. in your input file.'
+     stop
+  end if
+
+
   qInitWrLat_G = qInitWrLat
 
   qDumpEnd_G = qDumpEnd
@@ -697,7 +720,7 @@ SUBROUTINE read_beamfile(qSimple, dist_f, be_f, sEmit_n,sSigmaE,sLenE, &
 
 ! &&&&&&&&&& Default vals
 
-  sSigmaE(1,1:2) = 1.0_wp
+  sSigmaE(1,1:2) = 0.084_wp
   sSigmaE(1,3) = 1E8
   sSigmaE(1,4:5) = 1.0_wp
   sSigmaE(1,6) = 0.001_wp

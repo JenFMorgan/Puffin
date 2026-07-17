@@ -39,7 +39,7 @@ real(kind=wp) :: locx, locy, locz2, &
   do i = 1, maxEl
     if (i<=procelectrons_G(1)) then 
 
-
+     !print*, sy(1), 'sy', sx(1)
 !                  Get surrounding nodes 
 
       xnode = floor( (sx(i) + halfx ) / dx)  + 1_IP

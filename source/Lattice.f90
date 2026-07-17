@@ -22,6 +22,8 @@ use gtop2
 use initConds
 use functions
 use pdiff
+use HDF5
+
 
 implicit none
 
@@ -29,13 +31,19 @@ integer(kind=ip), parameter :: iUnd = 1_ip, &
                                iChic = 2_ip, &
                                iDrift = 3_ip, &
                                iQuad = 4_ip, &
-                               iModulation = 5_ip
+                               iModulation = 5_ip, &
+                               iLChirp = 6_ip, &
+                               iRM = 7_ip 
+                               
+                               
 
 integer(kind=ip), allocatable :: iElmType(:)
 
-integer(kind=ip) :: iUnd_cr, iChic_cr, iDrift_cr, iQuad_cr, iModulation_cr    ! Counters for each element type
+integer(kind=ip) :: iUnd_cr, iChic_cr, iDrift_cr, iQuad_cr, iModulation_cr, iLChirp_cr, iRM_cr    ! Counters for each element type
 
 !integer(kind=ip) :: inum_latt_elms
+character(1024_ip) :: BfieldfileName
+
 
 contains
 
@@ -111,8 +119,11 @@ contains
       allocate(mf(numOfUnds),delmz(numOfUnds),tapers(numOfUnds))
       allocate(nSteps_arr(numOfUnds), zMod(numOfUnds))
       allocate(ux_arr(numOfUnds), uy_arr(numOfUnds), &
-               kbnx_arr(numOfUnds), kbny_arr(numOfUnds))
+               kbnx_arr(numOfUnds), kbny_arr(numOfUnds), unphi_arr(numOfUnds))
+
       allocate(zundtype_arr(numOfUnds))
+
+      allocate(Bfieldfile(numOfUnds))
 
       allocate(chic_disp(numOfChics), chic_slip(numOfChics), &
                chic_zbar(numOfChics))
@@ -123,6 +134,13 @@ contains
                  enmod_mag(numOfModulations)) 
 
       allocate(quad_fx(numOfQuads), quad_fy(numOfQuads))
+
+      allocate(LChirp_dgamma(numofLChirp), LChirp_length(numofLChirp), &
+               LChirp_start(numofLChirp))
+       
+      allocate(RMamp(numofRM))               
+
+              
 
 
 !    Latt file name, number of wigg periods converted to z-bar,
@@ -147,6 +165,11 @@ contains
         quad_fy = quad_fy / lg_G
         chic_disp = chic_disp / 2.0_wp / lc_G
         enmod_wavenum = enmod_wavenum * lc_G
+        LChirp_dgamma = LChirp_dgamma * lc_G / c
+        LChirp_length = Lchirp_length / lc_G * c
+        LChirp_start =LChirp_start / lc_G * c
+
+        
       end if
 
     else
@@ -157,13 +180,16 @@ contains
       numOfDrifts = 0
       numOfQuads = 0
       numOfModulations = 0
+      numofLChirp = 0
+      numofRM = 0
 
       allocate(iElmType(1))
 
       allocate(mf(numOfUnds),delmz(numOfUnds),tapers(numOfUnds))
       allocate(nSteps_arr(numOfUnds), zMod(numOfUnds))
       allocate(ux_arr(numOfUnds), uy_arr(numOfUnds), &
-               kbnx_arr(numOfUnds), kbny_arr(numOfUnds))
+               kbnx_arr(numOfUnds), kbny_arr(numOfUnds),unphi_arr(numOfUnds))
+
       allocate(zundtype_arr(numOfUnds))
 
 
@@ -176,6 +202,11 @@ contains
                  enmod_mag(numOfModulations)) 
 
       allocate(quad_fx(numOfQuads), quad_fy(numOfQuads))
+
+      allocate(LChirp_dgamma(numofLChirp), LChirp_length(numofLChirp), &
+                LChirp_start(numofLChirp))
+
+      allocate(RMamp(numofRM)) 
 
       iElmType(1) = iUnd
       mf(1) = 1_wp
@@ -199,6 +230,8 @@ contains
     iDrift_cr=1_ip
     iQuad_cr=1_ip
     iModulation_cr = 1_ip
+    iLChirp_cr = 1_ip
+    iRM_cr=1_ip
 
     iCsteps = 1_ip
 
@@ -254,7 +287,7 @@ contains
 
   integer(kind=ip) :: nperlam
 
-  integer(kind=ip) :: cnt, cntq, cntu, cntc, cntd, cntm, cntt
+  integer(kind=ip) :: cnt, cntq, cntu, cntc, cntd, cntm, cntt, cntlc, cntrm
   character(40) :: ztest
 
 !   pi = 4.0_WP*ATAN(1.0_WP)
@@ -267,6 +300,8 @@ contains
   cntd = 0
   cntc = 0
   cntm = 0
+  cntlc = 0
+  cntrm = 0
 
 
 
@@ -312,9 +347,81 @@ contains
 
       else if (ztest(1:2) == 'UN') then
 
-        backspace(168)
+        if (ztest(1:3)  == 'UNF') then
+          backspace(168)
 
-        cntu = cntu + 1
+          cntu = cntu + 1
+
+  !       reading ... element ID, undulator type, num of periods, alpha (aw / aw0),
+  !       taper (d alpha / dz), integration steps per period, ux and uy (polarization
+  !       control), and kbnx and kbny, betatron wavenumbers for in-undulator strong
+  !       focusing (applied in the wiggler!!! NOT from quads. Remember the natural
+  !       undulator focusing is also included IN ADDITION to this...)
+
+          read (168,*, IOSTAT=ios) ztest, BfieldfileName, nw, nperlam
+          
+          zundtype_arr(cntu)= 'Bfile'
+          
+          mf(cntu) = 1.0
+          tapers(cntu) = 0
+          ux_arr(cntu) = 1.0
+          uy_arr(cntu) = 1.0
+          kbnx_arr(cntu) = 0
+          kbny_arr(cntu) = 0
+          unphi_arr(cntu) = 0
+          print*, 'Bfeilds provided by file reading file'
+          Call readH5BFieldFile(BfieldfileName, Bfieldfile(cntu))
+
+          print*, 'this is where Bfile is called'
+          print*, sAw_G * m_e * c * 2 * pi / q_e / lam_w_G ,'B0'
+          !scale the input 
+          Bfieldfile(cntu)%x_Bf=Bfieldfile(cntu)%x_Bf / sqrt(lg_G * lc_G)
+          Bfieldfile(cntu)%y_Bf=Bfieldfile(cntu)%y_Bf / sqrt(lg_G * lc_G)
+          Bfieldfile(cntu)%z_Bf=Bfieldfile(cntu)%z_Bf / (lg_G)
+          Bfieldfile(cntu)%Bx_f=Bfieldfile(cntu)%Bx_f *q_e *lam_w_G / sAw_G / m_e / c / 2.0_wp / pi
+          Bfieldfile(cntu)%By_f=Bfieldfile(cntu)%By_f *q_e *lam_w_G / sAw_G / m_e / c / 2.0_wp / pi
+          Bfieldfile(cntu)%Bz_f=Bfieldfile(cntu)%Bz_f *q_e *lam_w_G / sAw_G / m_e / c / 2.0_wp / pi
+   
+          
+          !print*, Bfieldfile(cntu)%By_f(:,6,6)
+          cntt = cntt + 1
+          iElmType(cntt) = iUnd
+  
+  
+          nSteps_arr(cntu) = nw * nperlam
+  
+          slamw = 4.0_WP * pi * rho
+          delmz(cntu) = slamw / real(nperlam, kind=wp)
+
+        else if (ztest(1:3)  == 'UNV') then
+          backspace(168)
+          print*, 'inside unv'
+
+          cntu = cntu + 1
+
+  !       reading ... element ID, undulator type, num of periods, alpha (aw / aw0),
+  !       taper (d alpha / dz), integration steps per period, ux and uy (polarization
+  !       control), and kbnx and kbny, betatron wavenumbers for in-undulator strong
+  !       focusing (applied in the wiggler!!! NOT from quads. Remember the natural
+  !       undulator focusing is also included IN ADDITION to this...)
+
+          read (168,*, IOSTAT=ios) ztest, zundtype_arr(cntu), nw, mf(cntu), tapers(cntu), &
+                                   nperlam, ux_arr(cntu), uy_arr(cntu), kbnx_arr(cntu), &
+                                   kbny_arr(cntu),unphi_arr(cntu)  ! read vars
+
+          cntt = cntt + 1
+          iElmType(cntt) = iUnd
+          nSteps_arr(cntu) = nw * nperlam
+
+          slamw = 4.0_WP * pi * rho
+          delmz(cntu) = slamw / real(nperlam, kind=wp)
+
+          print*, 'read in UNV'
+
+        else
+          backspace(168)
+
+          cntu = cntu + 1
 
 !       reading ... element ID, undulator type, num of periods, alpha (aw / aw0), 
 !       taper (d alpha / dz), integration steps per period, ux and uy (polarization 
@@ -322,18 +429,20 @@ contains
 !       focusing (applied in the wiggler!!! NOT from quads. Remember the natural 
 !       undulator focusing is also included IN ADDITION to this...)
 
-        read (168,*, IOSTAT=ios) ztest, zundtype_arr(cntu), nw, mf(cntu), tapers(cntu), &
+          read (168,*, IOSTAT=ios) ztest, zundtype_arr(cntu), nw, mf(cntu), tapers(cntu), &
                                  nperlam, ux_arr(cntu), uy_arr(cntu), kbnx_arr(cntu), &
                                  kbny_arr(cntu)  ! read vars
 
         cntt = cntt + 1
         iElmType(cntt) = iUnd
 
-
+        unphi_arr(cntu) = 0
         nSteps_arr(cntu) = nw * nperlam
 
         slamw = 4.0_WP * pi * rho
         delmz(cntu) = slamw / real(nperlam, kind=wp)
+
+        end if
   
         if (zundtype_arr(cntu) == 'curved') then
 
@@ -391,8 +500,32 @@ contains
         cntt = cntt + 1
         iElmType(cntt) = iModulation
 
+      else if (ztest(1:2) == 'LC') then
+
+        backspace(168)
+        cntlc = cntlc + 1
+        read (168,*, IOSTAT=ios) ztest, LChirp_dgamma(cntlc), LChirp_length(cntlc), LChirp_start(cntlc) !read vars 
+
+        cntt = cntt + 1
+        iElmType(cntt)= iLChirp
+
+
+      else if (ztest(1:2) == 'RM') then
+
+        print*, 'readinRM'
+
+        backspace(168)
+        cntrm = cntrm + 1
+        read (168,*, IOSTAT=ios) ztest, RMamp(cntrm)  ! read vars
+
+        cntt = cntt + 1
+        iElmType(cntt) = iRM
+
+      
 
       end if
+
+    
 
       cnt = cnt + 1
       !print*, 'hi'
@@ -440,6 +573,8 @@ contains
 
   sElZ2_G = sElZ2_G - 2.0_WP * chic_disp(iChic_cr) *  &
                (sElGam_G - 1_wp) &
+             + 2.0_WP * 1.5 * chic_disp(iChic_cr) *(sElGam_G - 1_wp)**2 &
+             - 2.0_WP * 2 * chic_disp(iChic_cr) *(sElGam_G - 1_wp)**3 &
                + chic_slip(iChic_cr)
 
   if (qDiffraction_G) then
@@ -475,12 +610,12 @@ contains
 !> @param[in] iL The element number in the lattice
 !> @param[out] sZ Scaled distance through the machine
 
-  subroutine driftSection(iL, sZ)
+  subroutine driftSection(iL, sZ, del_dr_z)
 
     integer(kind=ip), intent(in) :: iL
     real(kind=wp), intent(out) :: sZ
 
-    real(kind=wp) :: del_dr_z
+    real(kind=wp), intent(out) :: del_dr_z
 
     real(kind=wp), allocatable :: sp2(:)
     logical :: qDummy, qOKL
@@ -508,9 +643,14 @@ contains
 
     end if
 
+
     if (qDiffraction_G) call diffractIM(del_dr_z, qDummy, qOKL)
 
     deallocate(sp2)
+
+
+
+
 
     sZ = sZ + del_dr_z
     iDrift_cr = iDrift_cr + 1_ip
@@ -552,6 +692,7 @@ contains
                   / quad_fy(iQuad_cr)
 
     end if
+    
 
 
   deallocate(sp2)
@@ -584,9 +725,60 @@ contains
 
   end subroutine bModulation
 
+! ##############################################
+
+!> @author
+!> Jenny Morgan,
+!> SLAC, 
+!> Menlo Park, USA
+!> @brief
+!> Apply a simple energy chirp to the beam in Puffin.
+!> @param[in] iL The element number in the lattice
+
+  subroutine bLChirp(iL)
+
+    integer(kind=ip), intent(in) :: iL
+
+    !print*, 'applying chirp'
+    !print*, sElGam_G
+
+    sElGam_G = sElGam_G + LChirp_dgamma(iLChirp_cr) &
+               * (sElZ2_G - LChirp_start(iLChirp_cr) ) &
+               - LChirp_dgamma(iLChirp_cr) / 2  * Lchirp_length(iLChirp_cr)
 
 
+    iLChirp_cr = iLChirp_cr + 1
 
+  end subroutine bLChirp
+
+! ##############################################
+
+!> @author
+!> Jenny Morgan,
+!> SLAC, 
+!> Menlo Park, USA
+!> @brief
+!> Reduce the Field.
+!> @param[in] iL The element number in the lattice
+
+  subroutine bRM(iL)
+
+    integer(kind=ip), intent(in) :: iL
+
+    !print*, 'remove field'
+    !print*, sElGam_G
+    
+    fr_rfield = fr_rfield * RMamp(iRM_cr)
+    ac_rfield = ac_rfield * RMamp(iRM_cr)
+    bk_rfield = bk_rfield * RMamp(iRM_cr)
+
+
+    fr_ifield = fr_ifield * RMamp(iRM_cr)
+    ac_ifield = ac_ifield * RMamp(iRM_cr)
+    bk_ifield = bk_ifield * RMamp(iRM_cr)
+    iRM_cr = iRM_cr + 1
+
+  end subroutine bRM
 
 ! ##############################################
 
@@ -667,8 +859,9 @@ contains
             -  0.5_WP * kY**2 * sElY_G**2
 
         spy0_offset = -1_wp *  &
-                      ( pyOffset(sZ, srho_G, fx_G) &
+                      ( pyOffset(sZ, srho_G, fx_G, unphi_G) &
                       - kx**2 *  sElX_G  * sElY_G)
+    
 
 
     else if (zUndType_G == 'planepole') then
@@ -682,7 +875,7 @@ contains
             - 0.5_WP * (sEta_G / (4 * sRho_G**2)) * sElX_G**2
 
         spy0_offset = -1_wp * &
-                      pyOffset(sZ, srho_G, fx_G)
+                      pyOffset(sZ, srho_G, fx_G,unphi_G)
 
 
     else
@@ -694,7 +887,7 @@ contains
         spx0_offset = pxOffset(sZ, srho_G, fy_G)
 
         spy0_offset = -1.0_wp * &
-                     pyOffset(sZ, srho_G, fx_G)
+                     pyOffset(sZ, srho_G, fx_G,unphi_G)
 
 
     end if
@@ -706,7 +899,7 @@ contains
 
     sy_offset =    yOffSet(sRho_G, sAw_G, sGammaR_G, sGammaR_G * sElGam_G, &
                            sEta_G, sKappa_G, sFocusfactor_G, spx0_offset, spy0_offset, &
-                           fx_G, fy_G, sZ)
+                           fx_G, fy_G, sZ,unphi_G)
 
 
 !     Add on new offset to initialize beam for undulator module
@@ -772,7 +965,7 @@ contains
             -  0.5_WP * kY**2 * sElY_G**2
 
         spy0_offset = -1_wp *  &
-                      ( pyOffset(sZ, srho_G, fx_G) &
+                      ( pyOffset(sZ, srho_G, fx_G,unphi_G) &
                       - kx**2 *  sElX_G  * sElY_G)
 
 
@@ -787,7 +980,7 @@ contains
             - 0.5_WP * (sEta_G / (4 * sRho_G**2)) * sElX_G**2
 
         spy0_offset = -1_wp * &
-                      pyOffset(sZ, srho_G, fx_G)
+                      pyOffset(sZ, srho_G, fx_G,unphi_G)
 
 
     else
@@ -799,7 +992,7 @@ contains
         spx0_offset = pxOffset(sZ, srho_G, fy_G)
 
         spy0_offset = -1.0_wp * &
-                     pyOffset(sZ, srho_G, fx_G)
+                     pyOffset(sZ, srho_G, fx_G,unphi_G)
 
 
     end if
@@ -812,7 +1005,7 @@ contains
 
     sy_offset =    yOffSet(sRho_G, sAw_G, sGammaR_G, sGammaR_G * sElGam_G, &
                            sEta_G, sKappa_G, sFocusfactor_G, spx0_offset, -spy0_offset, &
-                           fx_G, fy_G, sZ)
+                           fx_G, fy_G, sZ,unphi_G)
 
 
 !     Add on new offset to initialize beam for undulator module
@@ -871,6 +1064,9 @@ contains
 
     zUndType_G = zundtype_arr(iM)
 
+
+    unphi_G =unphi_arr(iM)
+
     fx_G = ux_arr(iM)
     fy_G = uy_arr(iM)
 
@@ -891,10 +1087,255 @@ contains
       sZFE = nSteps * sStepSize
 
     end if
-
+ ! print*, sElY_G(1), 'initund'
   end subroutine initUndulator
 
 
+! ###########################################################
+
+!> @author
+!> Jenny Morgan,
+!> SLAC
+!> @brief
+!> Subroutine to read in the bfeild provied. 
+  subroutine readH5BFieldFile(Bfile, Bfieldfile)
+
+  character(*), intent(in) :: BFile
+  character(1024_IP) :: filename
+  type(bfield_type), intent(out) :: Bfieldfile
+  integer :: error 
+  INTEGER(HID_T) :: file_id !< File identifier
+  INTEGER(HID_T) :: dset_id       !< Dataset identifier
+  INTEGER(HID_T) :: dspace_id     !< Dataspace identifier in memory
+  INTEGER(kind=ip) ::  rank       !< Bfile Dataset rank
+  INTEGER(HSIZE_T), DIMENSION(3) :: dims_B   !< dims of B
+  INTEGER(HSIZE_T), DIMENSION(3) :: mdims_B  !< maxdims 
+  INTEGER(HSIZE_T), DIMENSION(1) :: mdims_axis  !< maxdims 
+  INTEGER(HSIZE_T), DIMENSION(1) :: dims_axis   !< dims of B
+  CHARACTER(LEN=2), PARAMETER :: dsetname_Bx = "Bx" 
+  CHARACTER(LEN=2), PARAMETER :: dsetname_By = "By"
+  CHARACTER(LEN=2), PARAMETER :: dsetname_Bz = "Bz" 
+  CHARACTER(LEN=1), PARAMETER :: dsetname_x = "x"
+  CHARACTER(LEN=1), PARAMETER :: dsetname_y = "y"
+  CHARACTER(LEN=1), PARAMETER :: dsetname_z= "z"    
+  integer(kind=ip) :: x_dims
+  character(LEN=40) :: errorstr !<String to write an error
+  INTEGER(HID_T) :: dtype         !< So we can check we're reading in doubles
+  INTEGER(HSIZE_T), DIMENSION(2) :: dsize  !< Size of hyperslab to write
+
+  filename = BFile
+
+  
+  print*, 'reading file  ', filename  
+
+    !if (tProcInfo_G%qRoot) then
+ 
+        CALL h5open_f(error)
+        !Print*,'h5in:H5 interface opened'
+        !print*,'reading hdf5 input - first opening file on rank 0'
+        CALL h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, error)
+        !Print*,'h5in:readH5Beamfile(file opened in serial)'
+        !Print*,error
+        CALL h5dopen_f (file_id, dsetname_x, dset_id, error)
+        !Print*,'h5in:readH5Beamfile(dataset opened in serial)'
+        !Print*,error
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        !Print*,error
+        CALL h5Sget_simple_extent_ndims_f(dspace_id,rank,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        CALL h5Sget_simple_extent_dims_f(dspace_id,dims_axis,mdims_axis,error)
+        !Print*,'hdf5_puff:readH5Beamfile(dataspace getting dims)'
+        !Print*,error ! rank on success = 2
+        !print*,dims_axis
+        allocate(Bfieldfile%x_Bf(dims_axis(1)))
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !print*,error
+        !print*,"h5d space got"
+        CALL h5dread_f(dset_id, H5T_NATIVE_DOUBLE, Bfieldfile%x_Bf, dims_axis, error)
+        call h5sclose_f(dspace_id,error) !dspace_id
+        !print*,error
+        !print*,"h5s closed"
+        call h5dclose_f(dset_id,error)
+        !print*,error
+        !print*,"h5d closed"
+        call h5fclose_F(file_id,error)
+        !print*,error
+        !print*,"h5f closed"
+
+        CALL h5open_f(error)
+        !Print*,'h5in:H5 interface opened'
+        !print*,'reading hdf5 input - first opening file on rank 0'
+        CALL h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, error)
+        !Print*,'h5in:readH5Beamfile(file opened in serial)'
+        !Print*,error
+        CALL h5dopen_f (file_id, dsetname_y, dset_id, error)
+        !Print*,'h5in:readH5Beamfile(dataset opened in serial)'
+        !Print*,error
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        !Print*,error
+        CALL h5Sget_simple_extent_ndims_f(dspace_id,rank,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        CALL h5Sget_simple_extent_dims_f(dspace_id,dims_axis,mdims_axis,error)
+        !Print*,'hdf5_puff:readH5Beamfile(dataspace getting dims)'
+        !Print*,error ! rank on success = 2
+        !print*,dims_axis
+        allocate(Bfieldfile%y_Bf(dims_axis(1)))
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !print*,error
+        !print*,"h5d space got"
+        CALL h5dread_f(dset_id, H5T_NATIVE_DOUBLE, Bfieldfile%y_Bf, dims_axis, error)
+        call h5sclose_f(dspace_id,error) !dspace_id
+        !print*,error
+        !print*,"h5s closed"
+        call h5dclose_f(dset_id,error)
+        !print*,error
+        !print*,"h5d closed"
+        call h5fclose_F(file_id,error)
+        !print*,error
+        !print*,"h5f closed"
+
+        CALL h5open_f(error)
+        !Print*,'h5in:H5 interface opened'
+        !print*,'reading hdf5 input - first opening file on rank 0'
+        CALL h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, error)
+        !Print*,'h5in:readH5Beamfile(file opened in serial)'
+        !Print*,error
+        CALL h5dopen_f (file_id, dsetname_z, dset_id, error)
+        !Print*,'h5in:readH5Beamfile(dataset opened in serial)'
+        !Print*,error
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        !Print*,error
+        CALL h5Sget_simple_extent_ndims_f(dspace_id,rank,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        CALL h5Sget_simple_extent_dims_f(dspace_id,dims_axis,mdims_axis,error)
+        !Print*,'hdf5_puff:readH5Beamfile(dataspace getting dims)'
+        !Print*,error ! rank on success = 2
+        !print*,dims_axis
+        allocate(Bfieldfile%z_Bf(dims_axis(1)))
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !print*,error
+        !print*,"h5d space got"
+        CALL h5dread_f(dset_id, H5T_NATIVE_DOUBLE, Bfieldfile%z_Bf, dims_axis, error)
+        call h5sclose_f(dspace_id,error) !dspace_id
+        !print*,error
+        !print*,"h5s closed"
+        call h5dclose_f(dset_id,error)
+        !print*,error
+        !print*,"h5d closed"
+        call h5fclose_F(file_id,error)
+        !print*,error
+        !print*,"h5f closed"
+  
+        CALL h5open_f(error)
+        !Print*,'h5in:H5 interface opened'
+        !print*,'reading hdf5 input - first opening file on rank 0'
+        CALL h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, error)
+        !Print*,'h5in:readH5Beamfile(file opened in serial)'
+        !Print*,error
+        CALL h5dopen_f (file_id, dsetname_Bx, dset_id, error)
+        !Print*,'h5in:readH5Beamfile(dataset opened in serial)'
+        !Print*,error
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        !Print*,error
+        CALL h5Sget_simple_extent_ndims_f(dspace_id,rank,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        CALL h5Sget_simple_extent_dims_f(dspace_id,dims_B,mdims_B,error)
+        !Print*,'hdf5_puff:readH5Beamfile(dataspace getting dims)'
+        !Print*,error ! rank on success = 2
+        !print*,dims_axis
+        allocate(Bfieldfile%Bx_f(dims_B(1),dims_B(2), dims_B(3)))
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !print*,error
+        !print*,"h5d space got"
+        CALL h5dread_f(dset_id, H5T_NATIVE_DOUBLE, Bfieldfile%Bx_f, dims_B, error)
+        call h5sclose_f(dspace_id,error) !dspace_id
+        !print*,error
+        !print*,"h5s closed"
+        call h5dclose_f(dset_id,error)
+        !print*,error
+        !print*,"h5d closed"
+        call h5fclose_F(file_id,error)
+        !print*,error
+        !print*,"h5f closed"
+
+        CALL h5open_f(error)
+        !Print*,'h5in:H5 interface opened'
+        !print*,'reading hdf5 input - first opening file on rank 0'
+        CALL h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, error)
+        !Print*,'h5in:readH5Beamfile(file opened in serial)'
+        !Print*,error
+        CALL h5dopen_f (file_id, dsetname_By, dset_id, error)
+        !Print*,'h5in:readH5Beamfile(dataset opened in serial)'
+        !Print*,error
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        !Print*,error
+        CALL h5Sget_simple_extent_ndims_f(dspace_id,rank,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        CALL h5Sget_simple_extent_dims_f(dspace_id,dims_B,mdims_B,error)
+        !Print*,'hdf5_puff:readH5Beamfile(dataspace getting dims)'
+        !Print*,error ! rank on success = 2
+        !print*,dims_axis
+        allocate(Bfieldfile%By_f(dims_B(1),dims_B(2), dims_B(3)))
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !print*,error
+        !print*,"h5d space got"
+        CALL h5dread_f(dset_id, H5T_NATIVE_DOUBLE, Bfieldfile%By_f, dims_B, error)
+        call h5sclose_f(dspace_id,error) !dspace_id
+        !print*,error
+        !print*,"h5s closed"
+        call h5dclose_f(dset_id,error)
+        !print*,error
+        !print*,"h5d closed"
+        call h5fclose_F(file_id,error)
+        !print*,error
+        !print*,"h5f closed"
+
+        CALL h5open_f(error)
+        !Print*,'h5in:H5 interface opened'
+        !print*,'reading hdf5 input - first opening file on rank 0'
+        CALL h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, error)
+        !Print*,'h5in:readH5Beamfile(file opened in serial)'
+        !Print*,error
+        CALL h5dopen_f (file_id, dsetname_Bz, dset_id, error)
+        !Print*,'h5in:readH5Beamfile(dataset opened in serial)'
+        !Print*,error
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        !Print*,error
+        CALL h5Sget_simple_extent_ndims_f(dspace_id,rank,error)
+        !Print*,'h5in:readH5Beamfile(dataspace opened in serial)'
+        CALL h5Sget_simple_extent_dims_f(dspace_id,dims_B,mdims_B,error)
+        !Print*,'hdf5_puff:readH5Beamfile(dataspace getting dims)'
+        !Print*,error ! rank on success = 2
+        !print*,dims_axis
+        allocate(Bfieldfile%Bz_f(dims_B(1),dims_B(2), dims_B(3)))
+        CALL h5Dget_space_f(dset_id,dspace_id,error)
+        !print*,error
+        !print*,"h5d space got"
+        CALL h5dread_f(dset_id, H5T_NATIVE_DOUBLE, Bfieldfile%Bz_f, dims_B, error)
+        call h5sclose_f(dspace_id,error) !dspace_id
+        !print*,error
+        !print*,"h5s closed"
+        call h5dclose_f(dset_id,error)
+        !print*,error
+        !print*,"h5d closed"
+        call h5fclose_F(file_id,error)
+        !print*,error
+        !print*,"h5f closed"
+       
+     !end if
+
+    
+
+     !1000 call Error_log('Error in H5in:readH5BeamFile',&
+     !tErrorLog_G)
+
+  end subroutine readH5BFieldFile
 ! #########################################################
 
 
@@ -951,7 +1392,7 @@ contains
 !                LOCAL ARGS
 
   integer :: ios
-  integer(kind=ip) :: cnt, cntq, cntu, cntc, cntd, cntm
+  integer(kind=ip) :: cnt, cntq, cntu, cntc, cntd, cntm, cntlc, cntrm
   character(40) :: ztest
 
   ztest = ''
@@ -961,6 +1402,8 @@ contains
   cntc = 0
   cntd = 0
   cntm = 0
+  cntlc = 0
+  cntrm = 0
 
   open(168,FILE=fname, IOSTAT=ios, STATUS='OLD', ACTION='READ', POSITION ='REWIND')
   if (ios /= 0) then
@@ -982,6 +1425,7 @@ contains
           print*, cntc, "chicanes,"
           print*, cntd, "drifts"
           print*, "and ", cntm, "modulation sections"
+          print*, "and ", cntrm, "remove sections"
       end if
 
       exit
@@ -1022,6 +1466,15 @@ contains
 
         cntm = cntm + 1
 
+      else if (ztest(1:2) == 'LC') then
+
+
+        cntlc = cntlc + 1
+
+      else if (ztest(1:2) == 'RM') then
+
+        cntrm = cntrm + 1
+
 
       end if
 
@@ -1035,7 +1488,7 @@ contains
   close(168, STATUS='KEEP')
 
 
-  numOfMods = cntq + cntu + cntc + cntd + cntm
+  numOfMods = cntq + cntu + cntc + cntd + cntm + cntlc + cntrm
 
   numOfUnds = cntu
 
@@ -1046,7 +1499,10 @@ contains
   numOfModulations = cntm
 
   numOfQuads = cntq
+  
+  numofLChirp = cntlc
 
+  numofRM = cntrm
 
   end function numOfMods
 

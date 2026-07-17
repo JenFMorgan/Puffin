@@ -173,7 +173,7 @@ subroutine rk4par(sZ,h,qD)
 !  idydx = size(dxdx)
   
 !    Get derivatives
-
+  ! print*, sElY_G(1), 'derivs'
   call derivs(sZ, A_localtr0, A_localti0, &
               sElX_G, sElY_G, sElZ2_G, sElPX_G, sElPY_G, sElGam_G, &
               dxdx, dydx, dz2dx, dpxdx, dpydx, dpz2dx, &

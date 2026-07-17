@@ -131,7 +131,7 @@ contains
   call adjUndPlace(sZ)
 
 
-
+  
 !$OMP PARALLEL
 
 ! !$OMP SIMD
@@ -226,6 +226,7 @@ contains
 
     if (qElectronsEvolve_G) then
 
+       ! print*, 'syJrhs', sy(1)
         call getBFields(sx, sy, sz, &
                         bxu, byu, bzu)
 

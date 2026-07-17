@@ -106,7 +106,7 @@ contains
 
   FUNCTION yOffSet_OneValue(rho, aw, gamma_r, gamma_j, &
                             eta, kappa, ff, px, py, &
-                            ux, uy, sZ0)
+                            ux, uy, sZ0,unphi)
 
 ! Calculate xOffset value
 ! Value of Range mid point offset from origin
@@ -121,7 +121,7 @@ contains
 ! sZ0      - Starting z position
 !	
     REAL(KIND=WP), INTENT(IN) :: rho,aw,gamma_r,gamma_j, &
-         eta,px,py,kappa,ff,ux,uy,sZ0
+         eta,px,py,kappa,ff,ux,uy,sZ0,unphi
     REAL(KIND=WP) :: yOffSet_OneValue, nc
     REAL(KIND=WP) ::srBcoeff,s_Cos_zOver2rho
 !
@@ -138,7 +138,7 @@ contains
               (gamma_r / sqrt(gamma_j**2 &
                   - (1.0_WP + nc*(px**2 + py**2))))
 
-    s_Cos_zOver2rho = COS(sZ0 / (2.0_WP * rho))
+    s_Cos_zOver2rho = COS(sZ0 / (2.0_WP * rho)+unphi *pi)
 ! Initial values for the electron pulse in all direction
     yOffSet_OneValue         = srBcoeff * n2col * s_Cos_zOver2rho
       
@@ -148,7 +148,7 @@ contains
 
   FUNCTION yOffSet_Array(rho, aw, gamma_r, gamma_j, &
                          eta, kappa, ff, px, py, &
-                         ux, uy, sZ0)
+                         ux, uy, sZ0,unphi)
 !
 ! Calculate xOffset value
 ! Value of Range mid point offset from origin
@@ -161,7 +161,7 @@ contains
 ! sZ0      - Starting z position
 
     REAL(KIND=WP), INTENT(IN) :: rho,aw,gamma_r,gamma_j(:), &
-         eta,px(:),py(:),kappa,ff,ux,uy,sZ0
+         eta,px(:),py(:),kappa,ff,ux,uy,sZ0,unphi
     REAL(KIND=WP) :: yOffSet_Array(size(px)), nc
     
     nc = 2.0_WP*aw**2/(ux**2 + uy**2)
@@ -177,7 +177,7 @@ contains
                     rho**2.0_WP / sqrt(eta)* &
                     (gamma_r / sqrt(gamma_j**2 &
                        - (1.0_WP + nc*(px**2 + py**2)))) * &
-                    n2col * cos(sZ0 / (2.0_WP * rho))
+                    n2col * cos(sZ0 / (2.0_WP * rho)+ unphi * pi)
 
 
   END FUNCTION yOffSet_Array
@@ -204,7 +204,7 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  FUNCTION pyOffset(z, rho, ux)
+  FUNCTION pyOffset(z, rho, ux, unphi)
 
 ! Equation for the initial electron py offset due to
 ! the undulator field.  (NOTE:- py offset, NOT
@@ -212,13 +212,13 @@ contains
 ! 
 !               ARGUMENTS
 
-    REAL(KIND=WP), INTENT(IN) :: z, rho, ux
+    REAL(KIND=WP), INTENT(IN) :: z, rho, ux ,unphi
 
 !                OUTPUT
 
     REAL(KIND=WP) :: pyOffset
 
-    pyOffset = -ux * n2col * SIN(z / (2.0_WP * rho))
+    pyOffset = -ux * n2col * SIN(z / (2.0_WP * rho) + unphi * pi)
     
   END FUNCTION pyOffset
 
@@ -272,7 +272,7 @@ SUBROUTINE getOffsets(sZ,samLenE,sZ2_center,gamma_d,offsets)
 
   spx_offset     = pxOffset(sZ, sRho_G, fy_G)
   
-  spy_offset     = pyOffset(sZ, sRho_G, fx_G)
+  spy_offset     = pyOffset(sZ, sRho_G, fx_G, unphi_G)
   
   sGamma_offset  = sGammaR_G * gamma_d
          
@@ -284,7 +284,7 @@ SUBROUTINE getOffsets(sZ,samLenE,sZ2_center,gamma_d,offsets)
   sy_offset      = yOffSet(sRho_G, sAw_G,  sGammaR_G, sGamma_offset, &
                            sEta_G, sKappa_G, sFocusfactor_G, &
                            spx_offset, spy_offset, &
-                           fx_G,fy_G, sZ)
+                           fx_G,fy_G, sZ, unphi_G)
               
 !  sz2_offset     = samLenE(iZ2_CG)/2.0_WP
 

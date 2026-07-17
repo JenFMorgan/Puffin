@@ -528,4 +528,76 @@ END SUBROUTINE shareFileType
 
   END SUBROUTINE sum_mpi_real
 
+  SUBROUTINE castarray2all(loc_arr,nvals,root)
+
+      !Author: Jenny Morgan
+
+      ! Takes an array on a node and casts it to all other arrays 
+      ! opposide of sum2rootarr
+      
+      REAL(KIND=WP),INTENT(INOUT)  ::  loc_arr(:)
+      INTEGER(KIND=IP),INTENT(IN)  ::  nvals
+      INTEGER(KIND=IP),INTENT(IN)  ::  root
+      
+      INTEGER(KIND=IP)  ::  error
+      
+      !print*, 'enterd casting'
+      CALL MPI_Bcast(loc_arr,nvals,MPI_DOUBLE_PRECISION,&
+                       root,MPI_COMM_WORLD,error)
+!      print*, error
+      
+      ! IF (tProcInfo_G%rank == root) THEN
+      
+      !  CALL MPI_REDUCE(MPI_IN_PLACE,loc_arr,nvals,MPI_DOUBLE_PRECISION,&
+      !                    MPI_SUM,root,MPI_COMM_WORLD,error)
+      
+      ! ELSE
+      
+      !  CALL MPI_REDUCE(loc_arr,loc_arr,nvals,MPI_DOUBLE_PRECISION,&
+      !                    MPI_SUM,root,MPI_COMM_WORLD,error)
+      
+      ! END IF
+      
+      END SUBROUTINE castarray2all
+
+      SUBROUTINE castinterger2all(loc_arr,nvals,root)
+
+            !Author: Jenny Morgan
+      
+            ! Takes an number on one node and cast it to all others
+            
+            integer(KIND=IP),INTENT(INOUT)  ::  loc_arr
+            INTEGER(KIND=IP),INTENT(IN)  ::  nvals
+            INTEGER(KIND=IP),INTENT(IN)  ::  root
+            
+            INTEGER(KIND=IP)  ::  error
+            
+            !print*, 'enterd casting'
+            CALL MPI_Bcast(loc_arr,nvals,MPI_DOUBLE_PRECISION,&
+                             root,MPI_COMM_WORLD,error)
+            !print*, error
+            
+            
+            END SUBROUTINE castinterger2all
+
+      SUBROUTINE castlargearray2all(loc_arr,nvals,root)
+
+            !Author: Jenny Morgan
+            
+            ! Takes an array on a node and casts it to all other arrays 
+            ! opposide of sum2rootarr
+            !need to indluce a 3 by 3 array
+                  
+            REAL(KIND=WP),INTENT(INOUT)  ::  loc_arr(:,:,:)
+            INTEGER(KIND=IP),INTENT(IN)  ::  nvals
+            INTEGER(KIND=IP),INTENT(IN)  ::  root
+                  
+            INTEGER(KIND=IP)  ::  error
+                 
+            !print*, 'enterd casting'
+            CALL MPI_Bcast(loc_arr,nvals,MPI_DOUBLE_PRECISION,&
+                             root,MPI_COMM_WORLD,error)
+            !print*, error
+
+            END SUBROUTINE castlargearray2all      
 END MODULE ParallelSetUp

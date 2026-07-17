@@ -104,6 +104,9 @@ module Setup
        LattFile,          &
        iWriteNthSteps,    &
        iIntWriteNthSteps, &
+       iwakefieldnthsteps, &
+       ispacechargeNthSteps, &
+       icurrsamp, &
        tArrayZ,           &
        tArrayA,           &
        tArrayE,           &
@@ -218,7 +221,7 @@ module Setup
 
 !     Pass local vars to global vars
 
-  call passToGlobals(srho,saw,sgammar,lambda_w,iNodes, &
+  call passToGlobals(srho,saw, icurrsamp, sgammar,lambda_w,iNodes, &
                      sLengthOfElm, qSimple, iNumElectrons, &
                      fx,fy,taper, sEleSig(1,iX_CG), sEleSig(1,iY_CG), &
                      sFiltFrac,sDiffFrac,sBeta, &

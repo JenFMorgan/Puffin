@@ -323,7 +323,7 @@ contains
     real(kind=wp) :: li1, li2, locz2 !<interpolation fractions
 
     Iarray = 0.0_wp   ! initialize
-
+    !print*, 'getting current'
     if (fieldMesh == iPeriodic) then
 
       do ij = 1, size(sElX_G)
@@ -795,6 +795,336 @@ contains
     real(kind=wp), intent(out) :: bunching(:)
     bunching = 0.0_wp    ! initialize
   end subroutine getBunchingFundamental
+
+
+
+  subroutine getz2prime(sam_len, npts, z2prime)
+
+    real(kind=wp), intent(in) :: sam_len
+    integer(kind=ip), intent(in) :: npts
+    real(kind=wp), intent(inout) :: z2prime(:)
+    integer(kind=ip) :: ij !interger for the elements of z2prime
+
+    
+    do ij = 1, npts
+
+       z2prime(ij)=ij*sam_len*lc_G
+
+    end do
+
+  end subroutine getz2prime
+
+
+
+
+  subroutine getSpaceChargeWake(SCwakearray, z2prime, r_b)
+
+    use typesAndConstants
+    
+    real(kind=wp), intent(out) :: SCwakearray(:)
+    real(kind=wp), intent(in) :: z2prime(:)
+    !real(kind=wp), intent(in) :: sam_len !< length of bins in z2
+    !real(kind=wp), intent(inout) :: Iarray(:) !< data containing the current info
+    integer(kind=ip) :: ij !<electron indices over which to integrate
+    !real(kind=wp) :: li1, li2, locz2 !<interpolation fractions
+    real(kind=wp), intent(in) :: r_b
+    SCwakearray = 0.0_wp   ! initialize
+    
+    do ij = 1, size(sElX_G)
+      !print*, ij
+      !print*, 'radius', r_b
+      !print*, sElZ2_G(ij)*lc_G
+      !print*, z2prime      
+      !SCwakearray=0.0560*(c*npk_bar_G*s_chi_bar_G(ij)*(sElZ2_G(ij)*Lc_g-z2prime))!*(1/abs(sElZ2_G(ij)*lc_G-z2prime)- &
+                   !1/((sElZ2_G(ij)*lc_G-z2prime)**2-r_b**2/(sGammaR_G*sElGam_G(ij))**2)**(1/2)))+SCwakearray
+      !SCwakearray=SCwakearray + 5.6472e+10*(c*q_e*npk_bar_G*s_chi_bar_G(ij)*(sElZ2_G(ij)*Lc_g-z2prime)) &
+      !            *(1/abs(sElZ2_G(ij)*Lc_g-z2prime) - 1/sqrt((sElZ2_G(ij)*lc_G-z2prime)**2 &
+      !            +(sElX_G(ij)**2*Lc_g*lg_G+sElY_G(ij)**2*Lc_g*lg_G)/(sGammaR_G*sElGam_G(ij))**2))
+      SCwakearray=SCwakearray + 5.6472e+10*(c*q_e*npk_bar_G*s_chi_bar_G(ij)*(sElZ2_G(ij)*Lc_g-z2prime)) &
+                  *(1/abs(sElZ2_G(ij)*Lc_g-z2prime) - 1/sqrt((sElZ2_G(ij)*lc_G-z2prime)**2 &
+                  +(sElX_G(ij)**2*Lc_g*lg_G+r_b**2)/(sGammaR_G*sElGam_G(ij))**2))
+     
+      !print*, size(SCwakearray)
+    
+    end do
+
+    !print*, 'before sum2RootarrayS'
+
+    call sum2RootArr(SCwakearray, size(SCwakearray), 0)
+
+  end subroutine getSpaceChargeWake
+
+
+  !> Calculate the chargedensity, gamma and radius through interpolating the charge into bins
+
+  subroutine getChargeGammaandA(sam_len, pts, chargeD_array, Gamma_array, rb_array)
+
+
+
+    use typesAndConstants
+    
+    
+    implicit none
+
+    integer(kind=ip), intent(in) :: pts
+    real(kind=wp), intent(in) :: sam_len !< length of bins in z2
+    real(kind=wp), intent(inout) :: chargeD_array(:) !< data containing the current info
+    real(kind=wp), intent(inout) :: Gamma_array(:) !< data containing the current info
+    real(kind=wp), intent(inout) :: rb_array(:) !< data containing the current info
+    real(kind=wp) :: meanX(pts), meanY(pts), meanXX(pts), meanYY(pts), meanR(pts), meanRR(pts) 
+
+    integer(kind=ip) :: ij, inl, inu, inlpb, inupb, is
+   
+    real(kind=wp) :: li1, li2, locz2 !<interpolation fractions
+
+    !Iarray = 0.0_wp   ! initialize
+    chargeD_array = 0.0_wp
+    Gamma_array = 0.0_wp
+    rb_array = 0.0_wp
+    meanX =0.0_wp
+    meanY =0.0_wp
+    meanXX =0.0_wp
+    meanYY = 0.0_wp
+    meanR = 0.0_wp
+    meanRR= 0.0_wp
+    !print*, 'getting current'
+
+
+    do ij = 1, size(sElX_G)
+
+      !   Array indices
+      inl = ceiling(sElZ2_G(ij)/sam_len)
+      inu = inl + 1
+
+      if ((inu > npts_I_G) .or. (inl<=0)) then
+      print*, 'NODES OUTSIDE BOUNDS'
+      STOP
+      end if
+
+      ! Interpolation fractions
+      locz2 = sElZ2_G(ij) - real((inl-1_ip),kind=wp) * sam_len
+      li2 = locz2 / sam_len
+      li1 = 1_wp - li2
+
+      if ((li2 < 0.0_wp) .or. (li1<0.0_wp)) then
+        print*, 'Unable to calculate correct interpolation fraction'
+        print*, 'Particle coords'
+        !print*, sElX_G(ij)
+        !print*, sElY_G(ij)
+        !print*, sElZ2_G(ij)
+        print*, 'Interps are negative!'
+        STOP
+      end if
+
+      ! interpolate onto current mesh
+      chargeD_array(inl) = li1 * s_chi_bar_G(ij) + chargeD_array(inl)
+      chargeD_array(inu) = li2 * s_chi_bar_G(ij) + chargeD_array(inu)
+      Gamma_array(inl)=li1 * s_chi_bar_G(ij)*sElGam_G(ij) + Gamma_array(inl)
+      Gamma_array(inu)=li2 * s_chi_bar_G(ij)*sElGam_G(ij) + Gamma_array(inu)
+
+      
+
+
+      meanX(inl)=li1 * s_chi_bar_G(ij)*sElX_G(ij) + meanX(inl)
+      meanX(inu)=li2 * s_chi_bar_G(ij)*sElX_G(ij) + meanX(inu)
+      
+      meanR(inl)=li1 * s_chi_bar_G(ij)*sqrt(sElX_G(ij)**2+sElY_G(ij)**2) + meanR(inl)
+      meanR(inu)=li2 * s_chi_bar_G(ij)*sqrt(sElX_G(ij)**2+sElY_G(ij)**2) + meanR(inu)
+
+      meanY(inl)=li1 * s_chi_bar_G(ij)*sElY_G(ij) + meanY(inl)
+      meanY(inu)=li2 * s_chi_bar_G(ij)*sElY_G(ij) + meanY(inu)
+   
+      meanXX(inl)=meanXX(inl)+li1*s_chi_bar_G(ij)*sElX_G(ij)*sElX_G(ij)
+      meanXX(inu)=meanXX(inu)+li2*s_chi_bar_G(ij)*sElX_G(ij)*sElX_G(ij)
+      
+      meanYY(inl)=meanYY(inl)+li1*s_chi_bar_G(ij)*sElY_G(ij)*sElY_G(ij)
+      meanYY(inu)=meanYY(inu)+li2*s_chi_bar_G(ij)*sElY_G(ij)*sElY_G(ij)
+
+      meanRR(inl)=meanRR(inl)+li1*s_chi_bar_G(ij)*(sElX_G(ij)**2+sElY_G(ij)**2)
+      meanRR(inu)=meanRR(inu)+li2*s_chi_bar_G(ij)*(sElX_G(ij)**2+sElY_G(ij)**2)
+      !print*, 'l1', li1, li2 
+     end do
+ 
+   
+
+   call sum2RootArr(chargeD_array, size(chargeD_array), 0)
+   call sum2RootArr(Gamma_array, size(Gamma_array), 0)
+   call sum2RootArr(meanX, size(meanX), 0)
+   call sum2RootArr(meanY, size(meanY), 0)
+   call sum2RootArr(meanXX, size(meanXX), 0)
+   call sum2RootArr(meanYY, size(meanYY), 0)
+   call sum2RootArr(meanR, size(meanR), 0)
+   call sum2RootArr(meanRR, size(meanRR), 0)
+  
+ 
+   if (qOneD_G) then
+   
+    if (tProcInfo_G%qRoot) then
+      do is=1,pts
+        if (chargeD_array(is)>0.0_wp) then
+           Gamma_array(is)= Gamma_array(is) / chargeD_array(is)
+           rb_array(is)=sqrt(ata_G / 2 / pi)
+        else
+           Gamma_array(is)= 0.0
+           rb_array(is) = 0.0
+        end if 
+      end do
+   end if
+
+   else
+
+      if (tProcInfo_G%qRoot) then
+         do is=1,pts
+           if (chargeD_array(is)>0.0_wp) then
+              Gamma_array(is)= Gamma_array(is) / chargeD_array(is)
+              rb_array(is)=sqrt(sqrt(abs((meanXX(is)/chargeD_array(is)) - &
+                            (meanX(is)/chargeD_array(is))**2.0_wp))*sqrt(abs((meanYY(is)/chargeD_array(is)) &
+                            - (meanY(is)/chargeD_array(is))**2.0_wp)))
+              !sqrt(abs((meanRR(is)/chargeD_array(is)) - (meanR(is)/chargeD_array(is))**2.0_wp))
+              !print*, meanY(is)/chargeD_array(is)
+           else
+             Gamma_array(is)= 0.0
+             rb_array(is) = 0.0
+           end if 
+         end do
+      end if
+    end if
+
+
+
+  
+
+   chargeD_array = chargeD_array * npk_bar_G    ! N_e at each node
+
+  
+   if (qOneD_G) chargeD_array = chargeD_array * ata_G
+   chargeD_array = chargeD_array * q_e   / (sam_len*lc_G)  ! dQ / dz2
+   chargeD_array = chargeD_array        
+   !print*, 'samlength',  (sam_len*lc_G)
+
+
+
+  end subroutine getChargeGammaandA
+
+  subroutine getSpaceChargeWake_fromCurrent(SCwakearray,chargeD_array, Gamma_array, rb_array, z2prime, pts)
+
+    use typesAndConstants
+
+    integer(kind=ip), intent(in) :: pts
+    real(kind=wp), intent(out) :: SCwakearray(:)
+    real(kind=wp), intent(in) :: z2prime(:)
+    !real(kind=wp), intent(in) :: sam_len !< length of bins in z2
+    real(kind=wp), intent(in) :: chargeD_array(:) !< data containing the charge density
+    real(kind=wp), intent(inout) :: Gamma_array(:) !< data containing the slice average gamma
+    real(kind=wp), intent(in) :: rb_array(:) !< data containing the average beam radius
+    integer(kind=ip) :: ij, inl, inu, inlpb, inupb !<electron indices over which to integrate
+    !real(kind=wp) :: li1, li2, locz2 !<interpolation fractions
+    real(kind=wp) :: Ez(pts)
+    integer(kind=ip) :: is, js
+
+    SCwakearray = 0.0_wp   ! initialize
+    !n2col = n2col0  + undgrad*(sz - sZFS)
+    !print*, (z2prime)
+    if (zUndType_G == 'planepole')  then
+     !  print*, 'spacecharge us for planepole' 
+       Gamma_array=Gamma_array/sqrt(1.0_wp +((n2col0*sAw_G)**2.0_wp)/2.0_wp)  
+    elseif (zUndType_G == 'helical')  then
+      ! print*, 'spacecharge is for helical'
+       Gamma_array=Gamma_array/sqrt(1.0_wp +((n2col0*sAw_G)**2.0_wp))
+    elseif (zUndType_G == '')  then
+       !print*, 'spacecharge is for varriable'
+       Gamma_array=Gamma_array/sqrt(1.0_wp +((n2col0*sAw_G)**2.0_wp)*(fy_G**2.0_wp+fx_G**2.0_wp)/2.0_wp)
+    elseif (zUndType_G == 'Drift') then
+       Gamma_array=Gamma_array
+       !print*, 'spacecharge is for drift' 
+    end if
+    !print*, n2col0*sAw_G, 'using'
+    !print*, n2col*sAW_G, 'change to'
+
+    do is=1,pts
+       do js=1, pts
+          if (z2prime(is)-z2prime(js) == 0_wp .or. Gamma_array(js) == 0.0_wp .or. rb_array(js) == 0.0_wp) then
+             Ez(js)=0.0
+          else
+             Ez(js)=1.0_wp/ 2.0_wp / e_0 / pi / (rb_array(js))**2 *chargeD_array(js)*(z2prime(js)-z2prime(is)) * & 
+             (1.0_wp / abs(z2prime(js)-z2prime(is)) - 1/ sqrt((z2prime(js)-z2prime(is))**2&
+             + (rb_array(js))**2.0_wp/(sGammaR_G*Gamma_array(js))**2.0_wp))
+           !  print*, z2prime(is)
+          end if
+          !print*,  rb_array(js)*sqrt(lg_G*lc_G)
+      end do
+       !print*, e_0      
+       SCwakearray(is)=m_trapz(z2prime, Ez)
+       !SCwakearray(is)=sum(Ez)
+
+    end do
+  !print*, SCwakearray
+  end subroutine getSpaceChargeWake_fromCurrent
+
+subroutine SC2Delgamma(delGamma_array, SCwakearray, dz_sc)
+
+use typesAndConstants
+
+real(kind=wp), intent(out) :: delGamma_array(:)
+
+real(kind=wp), intent(in) :: SCwakearray(:)
+
+real(kind=wp), intent(in)  :: dz_sc ! distance to apply space charge
+
+
+delGamma_array=SCwakearray*q_e/m_e/c**2*dz_sc/sGammaR_G
+
+
+end subroutine SC2Delgamma
+
+subroutine applyenergychange(delGamma_array, sam_len)
+
+integer(kind=ip) :: ij, inl, inu, inlpb, inupb, is
+
+real(kind=wp), intent(in) :: sam_len !< length of bins in z2
+   
+real(kind=wp) :: li1, li2, locz2 !<interpolation fractions
+
+real(kind=wp), intent(in) :: delGamma_array(:)
+
+
+do ij = 1, size(sElX_G)
+
+  !   Array indices
+  inl = ceiling(sElZ2_G(ij)/sam_len)
+  inu = inl + 1
+
+  if ((inu > npts_I_G) .or. (inl<=0)) then
+  print*, 'NODES OUTSIDE BOUNDS'
+  STOP
+  end if
+
+  ! Interpolation fractions
+  locz2 = sElZ2_G(ij) - real((inl-1_ip),kind=wp) * sam_len
+  li2 = locz2 / sam_len
+  li1 = 1_wp - li2
+
+  if ((li2 < 0.0_wp) .or. (li1<0.0_wp)) then
+    print*, 'Unable to calculate correct interpolation fraction'
+    print*, 'Particle coords'
+    !print*, sElX_G(ij)
+    !print*, sElY_G(ij)
+    !print*, sElZ2_G(ij)
+    print*, 'Interps are negative!'
+    STOP
+  end if
+
+  !delGamma_array(inl) * (li1)
+
+  sElGam_G(ij) =sElGam_G(ij) + delGamma_array(inl) * (li1) + delGamma_array(inu)*(li2) 
+
+ end do
+ 
+
+
+end subroutine applyenergychange
+
+
 
 
 end module avwrite

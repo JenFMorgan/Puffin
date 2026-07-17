@@ -58,7 +58,7 @@ CONTAINS
 !> @param[in] qSwitch Array of switches for different simulation options
 !> @param[inout] qOK Error flag.
 
-SUBROUTINE passToGlobals(rho, aw, gamr, lam_w, iNN, &
+SUBROUTINE passToGlobals(rho, aw, icurrsamp, gamr, lam_w, iNN, &
                          sElmLen, qSimple, iNMPs, fx, fy, &
                          taper, sFSigX, sFSigY, sFiltFrac, &
                          dStepFrac, sBeta, zUndType, &
@@ -67,6 +67,7 @@ SUBROUTINE passToGlobals(rho, aw, gamr, lam_w, iNN, &
     IMPLICIT NONE
 
     REAL(KIND=WP),     INTENT(IN)    :: rho,aw,gamr, lam_w
+    real(KIND=wp),   INTENT(IN)   :: icurrsamp
     INTEGER(KIND=IP),  INTENT(IN)    :: iNN(:), iNMPs(:,:)
 
     REAL(KIND=WP),     INTENT(IN)    :: sElmLen(:), sFSigX, sFSigY
@@ -242,8 +243,8 @@ SUBROUTINE passToGlobals(rho, aw, gamr, lam_w, iNN, &
     diffstep = dStepFrac * 4.0_WP * pi * rho
     sBeta_G = sBeta
 
-    NBX_G = 16_IP   ! Nodes used in boundaries
-    NBY_G = 16_IP
+    NBX_G = 20_IP !16_IP !1500_IP   ! Nodes used in boundaries
+    NBY_G = 20_IP !16_IP !130_IP
 
     NBZ2_G = 37_IP
 
@@ -366,7 +367,7 @@ SUBROUTINE passToGlobals(rho, aw, gamr, lam_w, iNN, &
     END IF
 
 
-    dz2_I_G = 4.0_wp * pi * sRho_G
+    dz2_I_G = 4.0_wp * pi * sRho_G / icurrsamp
     call getCurrNpts(dz2_I_G, npts_I_G)
 
 

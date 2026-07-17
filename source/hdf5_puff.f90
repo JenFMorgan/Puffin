@@ -21,6 +21,9 @@ implicit none
 
 contains
 
+
+
+
 !> Overall script to write the larger full h5 output data files
 !! Not including the integrated quantities
 !! @ Todo remove unused vars - filename parameters are not required.
@@ -28,6 +31,7 @@ contains
   subroutine wr_h5(sZ, sZ_loc, tArrayA, tArrayE, tArrayZ, iL, &
                    iIntWr, iWr, qSep, qWriteFull, &
                    qWriteInt, nslices, qOK)
+                
 
     implicit none
 
@@ -49,37 +53,41 @@ contains
     logical :: qWriteInt, qWriteFull !<Flags identifying if it is time to write
     real(kind=wp) :: time,stime,ftime !<Simulation time, calcualted here
     real(kind=wp) :: PowScale !< Scaling factor for power
+    real(kind=wp), dimension(npts_I_G) :: SPWakearray !< spacechargewake data (called here)
+    real(kind=wp), dimension(npts_I_G) :: z2prime !< zprime data (called here)
+    real(kind=wp), dimension(npts_I_G) ::  chargeD_array, Gamma_array, rb_array
+    real(kind=wp) :: r_b 
     error = 0
     slicetrim=(4*pi*srho_g*nslices)-sLengthOfElmZ2_G*NZ2_G
 
 ! now this is passed in so that we can set the arrays properly
 
     !    nslices = int( (sLengthOfElmZ2_G*NZ2_G)/(4*pi*srho_g))
-
+    
     igwr = igwr + 1_ip
     time = sZ
 
     if (qWriteFull) then
 
 !      time = sZ ! real(iCSteps,kind=wp)*sStepSize*lg_G/c
-
+    
       if (qSep) then
 !        print *,'Dumping particles individually...'
 
         call cpu_time(stime)
         call outputH5BeamFilesID(time, sz_loc, iL, error)
         call cpu_time(ftime)
-!        print '("Dumped particles separately. Took time = ",f6.3," secs on rank ",i5)'&
-!          ,ftime-stime,tProcInfo_G%rank
+        print '("Dumped particles separately. Took time = ",f6.3," secs on rank ",i5)'&
+          ,ftime-stime,tProcInfo_G%rank
 
       else 
 
 !        print *,'Dumping particles to single file...'
         call cpu_time(stime)
-        call outputH5BeamFilesSD(time, sz_loc, iL, error)
+          call outputH5BeamFilesSD(time, sz_loc, iL, error)
         call cpu_time(ftime)
-!        print '("Dumped particles to one file. Took time = ",f6.3," seconds on rank ",i5)'&
-!          ,ftime-stime,tProcInfo_G%rank
+        print '("Dumped particles to one file. Took time = ",f6.3," seconds on rank ",i5)'&
+          ,ftime-stime,tProcInfo_G%rank
 
       end if
 
@@ -179,21 +187,37 @@ contains
         sdX,sdY,sdpx,sdpy,eX,eY,ax,ay,bx,by,aveGamma,aveDgamma, &
         bun1,bun2,bun3,bun4,bun5,sq)
 
+      !if (tProcInfo_G%qRoot) then
+          if (qspacecharge_G) then
+                call getz2prime(dz2_I_G, npts_I_G,  z2prime)
+                call getChargeGammaandA(dz2_I_G,npts_I_G,  chargeD_array, Gamma_array, rb_array)
+                if (tProcInfo_G%qRoot) then
+                    rb_array= 2 * rb_array * sqrt(lg_G*lc_G)
+                    Gamma_array=Gamma_array
+                    call getSpaceChargeWake_fromCurrent(SPwakearray,chargeD_array, Gamma_array, rb_array, z2prime, npts_I_G)
+                end if
+                !r_b=sum(sqrt(sdX**2+sdy**2 )) / size(sdX)*sqrt(lg_G*lc_G)
+                !print*, 'z2', z2prime
+               
+                !call getSpaceChargeWake( SPWakearray, z2prime, r_b)
+           end if
+      !end if
+       
 ! For starters, write on rank 0 only
 
 
 ! but the write operation does not, as the data has been collected on rank0.
-
+      
       if (tProcInfo_G%qRoot) then
-
+        
         PowScale = lg_G * lc_G * c * e_0 * ((sgammaR_G * m_e * c**2.0_wp ) / &
                                (q_e * skappa_G * lg_G ))**2.0_wp
 
         avGam4Unsc = aveGamma
         where (avGam4Unsc == 0.0_wp) avGam4Unsc = 1.0_wp
-
+        
         call CreateIntegrated1DFloat(time, sz_loc, iL,error,nslices)
-
+        
         if (qOneD_G) then
 
           call addH5Field1DFloat(power, 'Intensity', "intFieldMeshSc", &
@@ -226,6 +250,18 @@ contains
 
         end if
 
+        if (qspacecharge_G) then
+            call addH5Field1DFloat(SPWakearray, 'E_spacecharge',  "intCurrMeshSc", &
+                               "z2, Spacecharge", time, sz_loc, iL, error)
+            call addH5Field1DFloat(rb_array, 'rb',  "intCurrMeshSc", &
+                               "z2, rb", time, sz_loc, iL, error)
+             call addH5Field1DFloat(chargeD_array, 'Charge_projected', "intCurrMeshSc", &
+                               "z2, Charge_projected", time, sz_loc, iL, error)
+
+        end if
+
+
+        
         call addH5Field1DFloat(Iarray, 'beamCurrent',  "intCurrMeshSc", &
                                "z2, Current (A)", time, sz_loc, iL, error)
 
@@ -443,12 +479,103 @@ contains
 
 
 
+subroutine ApplyEnergyshift(sZ, sZ_loc, iL, &
+        iApwake, iApspace, &
+        qApplyWake, &
+        qApplyspaceCharge, nslices, qOK)
+
+    
+  implicit none
+
+  real(kind=wp), intent(in) :: sZ, sZ_loc 
+
+  integer(kind=ip), intent(in) :: iApwake, iApspace !<Aren't these global?
+  logical :: qApplywake, qApplyspacecharge !<Flags identifying if it is time to write
+  logical, intent(inout) :: qOK  !< Flag set if any probs 
+  integer(kind=ip), intent(in)  :: nslices, iL
+  real(kind=wp), dimension(npts_I_G) :: Iarray !< current data (called here)
+  real(kind=wp), dimension(npts_I_G) :: chargeD_array !< charge denisty data (called here)
+  real(kind=wp), dimension(npts_I_G) :: Gamma_array !< slicegamma data (called here)
+  real(kind=wp), dimension(npts_I_G) :: delGamma_array 
+  real(kind=wp), dimension(npts_I_G) :: rb_array !< slice radius data (called here)
+  real(kind=wp), dimension(npts_I_G) :: SPWakearray !< spacechargewake data (called here)
+  real(kind=wp), dimension(npts_I_G) :: z2prime !< zprime data (called here)
+  real(kind=wp), dimension(nslices) :: aveX,aveY,avePX,avePY,aveGamma,aveDgamma
+  real(kind=wp), dimension(nslices) :: sdX, sdY, sdpx, sdpy, eX, ey, aX, aY, bX, bY
+  real(kind=wp), dimension(nslices) :: bun1,bun2,bun3,bun4,bun5,sq
+  real(kind=wp) :: slicetrim
+  real(kind=wp) :: r_b
+  real(kind=wp) :: dz_sc 
+  integer :: error
+  slicetrim=(4*pi*srho_g*nslices)-sLengthOfElmZ2_G*NZ2_G
+  error=0
+
+  if (qApplywake) then
+
+      print*, 'a', r_b
+      ! operation is done on rank 0 only
+
+      if (tProcInfo_G%qRoot) then
+              print*, 'wake2', SPWakearray 
+              ! for now lets keep the calculation on one node 
+              !call getSpaceChargeWake(Iarray, z2prime)
+      end if
+
+            
+  end if
+
+  if (qApplyspacecharge) then
+
+        call getz2prime(dz2_I_G, npts_I_G,  z2prime)
+        
+        call getChargeGammaandA(dz2_I_G,npts_I_G,  chargeD_array, Gamma_array, rb_array)
+        
 
 
+      if (tProcInfo_G%qRoot) then
+              print*, 'here we can apply space charge'
+
+              rb_array= 2 * rb_array * sqrt(lg_G*lc_G)
+              r_b= sum(rb_array)/size(rb_array)
+              print*, 'rb',r_b
+              print*, 'sqrt', sqrt(r_b)
+              !print*, sum(Gamma_array)/size(Gamma_array)
+              call getSpaceChargeWake_fromCurrent(SPwakearray,chargeD_array, Gamma_array, rb_array, z2prime, npts_I_G)
+              if (zUndType_G == 'Drift') then
+                dz_sc = sZ_loc *lg_G
+              else 
+                dz_sc=ispacechargeNthSteps *sStepSize *lg_G
+              end if
+              
+              !print*, 'length of applied energy chage', dz_sc
+
+              call SC2Delgamma(delGamma_array, SPwakearray, dz_sc)
+
+    end if
+    call castarray2all(delGamma_array, size(delGamma_array), 0)
+
+    
+    
+    call applyenergychange(delGamma_array, dz2_I_G)
+    
+end if
+
+if (error .ne. 0) goto 1000
+! Todo not yet implemented
+!     call outputH5SliceEmittance
+!       NOT YET IMPLEMENTED
+
+error = 0            
+
+goto 2000     
+
+! Error Handler - Error log Subroutine in CIO.f90 line 709
+
+1000 print*,'Error in hdfPuffin:wr_h5'
+2000 continue
 
 
-
-
+end subroutine ApplyEnergyshift
 
 
 

@@ -148,7 +148,8 @@ end subroutine wr_cho
 
     qWriteInt = .false.
     qWriteFull = .false.
-
+    
+    
 
     if (qInitWrLat_G) then
 
@@ -253,5 +254,260 @@ function qWriteq(iStep, iCsteps, iWriteNthSteps, iIntWriteNthSteps, nSteps)
 
 
 end function qWriteq
+
+!> @author
+!> Jenny Morgan,
+!> SLAC,
+!> Menlo Park, USA
+!> @brief
+!> function to check if energy change should be applied.
+
+function qEshiftq(iStep, iCsteps, iwakefieldNthSteps, ispacechargeNthSteps, nSteps)
+  implicit none
+  
+  logical :: qEshiftq
+  integer(kind=ip) :: iStep, iCsteps, iwakefieldNthSteps, ispacechargeNthSteps, nSteps
+  integer(kind=ip) :: iw
+
+  if ((qspacecharge_G .or. qwake_G))  then
+     if (qInitWrLat_G) then
+
+        if ((mod(iStep,ispacechargeNthSteps)==0) .or. (iStep == nSteps) &
+                     .or. (mod(iStep,iwakefieldNthSteps)==0)) then
+
+          qEshiftq = .true.
+
+       else
+
+          qEshiftq = .false.
+
+        end if
+
+      else
+
+        if ((mod(iCsteps,ispacechargeNthSteps)==0) .or. (iCsteps == nSteps) &
+                     .or. (mod(iCsteps,iwakefieldNthSteps)==0)) then
+
+         qEshiftq = .true.
+
+       else
+
+         qEshiftq = .false.
+
+       end if
+
+     end if
+    
+    else
+
+      qEshiftq = .false.
+
+
+    end if 
+
+
+
+!  if (qWrArray_G) then
+!
+!    do iw = 1, size(wrarray)
+!
+!      if (wrarray(iw) == iCsteps) qWriteq = .true.
+!
+!    end do
+! not sure what this does shall ignore for now. 
+  
+!  end if
+end function qEshiftq
+
+
+
+subroutine EnergyshiftIM(sZ, sZl, &
+  iStep, iCstep, iL, iwakefieldNthSteps, & 
+  ispacechargeNthSteps, &
+  nSteps, qOK)
+
+
+  ! Top subroutine to apply space charge or wakefeilds. Checking which to apply. 
+
+   implicit none
+ 
+   real(kind=wp), intent(inout) :: sZ, sZl
+   integer(kind=ip), intent(in) :: iStep, iwakefieldNthSteps, ispacechargeNthSteps, nSteps
+   integer(kind=ip), intent(in) :: iCstep, iL
+   integer(kind=ip) :: nslices
+   logical, intent(inout) :: qOK
+
+   integer error
+
+   logical :: qOKL, qApplyWake, qApplyspaceCharge
+
+   qOK = .false.
+
+
+   call wake_or_spacecharge(istep, iCstep, iwakefieldNthSteps, ispacechargeNthSteps, &
+   qApplyWake, qApplyspaceCharge, qOK)
+
+
+   call Energy_cho(sZ, sZl, &
+   iStep, iCstep, iL, iwakefieldNthSteps, &
+   ispacechargeNthSteps, nSteps, qApplyWake, qApplyspaceCharge, qOK)
+
+   qOK = .TRUE.
+
+   goto 2000
+
+1000  call Error_log('Error in  EnergyshiftIM',tErrorLog_G)
+
+2000 continue
+
+
+
+end subroutine EnergyshiftIM
+
+subroutine wake_or_spacecharge(istep, iCsteps, iApwake, iApspace, &
+  qApplyWake, qApplyspaceCharge, qOK)
+
+   implicit none
+
+   !   Figure out whether to apply wake or space charge
+
+
+   integer(kind=ip), intent(in) :: istep, iCsteps
+   integer(kind=ip), intent(in) :: iApwake, iApspace
+   logical, intent(inout) :: qApplyWake, qApplyspaceCharge, qOK
+
+   logical ::  qOKL
+ 
+   qOK = .false.
+
+   qApplyWake = .false.
+   qApplyspaceCharge = .false.
+ 
+   if (qInitWrLat_G) then
+
+   if (qwake_G .and. ((mod(iStep,iApwake)==0) .or. (iStep == nSteps) .or. (iStep == 0)) ) then
+
+     qApplyWake = .true.
+
+   end if
+
+
+   if ( qspacecharge_G .and. ((mod(iStep,iApspace)==0) .or. (iStep == nSteps) .or. (iStep == 0)) ) then
+
+      qApplyspaceCharge = .true.
+
+   end if
+
+   else
+
+   if (qwake_G .and. ((mod(iCsteps,iApwake)==0) .or. (iCsteps == nSteps) .or. (iCsteps == 0)) ) then
+
+      qApplyWake = .true.
+
+   end if
+
+
+   if (qspacecharge_G .and. ((mod(iCsteps,iApspace)==0) .or. (iCsteps == 0)) ) then
+
+      qApplyspaceCharge = .true.
+
+   end if
+
+   end if
+
+!if (qWrArray_G) then
+
+!do iw = 1, size(wrarray)
+
+!if (wrarray(iw) == iCsteps) then
+!qWriteFull = .true.
+!qWriteInt = .true.
+!end if
+
+!end do
+
+!end if
+
+end subroutine wake_or_spacecharge
+
+subroutine Energy_cho(sZ, sZl, &
+  iStep, iCstep, iL, iwakefieldNthSteps, &
+  ispacechargeNthSteps, nSteps, qApplyWake, qApplyspaceCharge, qOK)
+
+
+! Subroutine to apply wakefeilds space charge or both
+
+
+implicit none
+
+real(kind=wp), intent(inout) :: sZ, sZl
+integer(kind=ip), intent(in) :: iStep, iwakefieldNthSteps, ispacechargeNthSteps, nSteps
+integer(kind=ip), intent(in) :: iCstep, iL
+logical, intent(in) :: qApplyWake, qApplyspaceCharge
+logical, intent(inout) :: qOK
+
+integer(kind=ip) :: nslices
+integer error
+
+logical :: qOKL
+
+
+if (fieldMesh == iTemporal) then
+  nslices=ceiling( (sLengthOfElmZ2_G*NZ2_G)/(4*pi*srho_g))
+else
+  nslices=ceiling( (sLengthOfElmZ2_G * real((NZ2_G-1_ip),kind=wp) )/(4*pi*srho_g)) ! + 30_ip
+end if
+
+call ApplyEnergyshift(sZ, szl, iL, &
+                      iwakefieldNthSteps, ispacechargeNthSteps, &
+                      qApplyWake, &
+                      qApplyspaceCharge, nslices, qOK)
+
+
+
+end subroutine Energy_cho
+
+
+subroutine Energy_cho_drift(sZ, &
+  iL, iwakefieldNthSteps, &
+  ispacechargeNthSteps, qApplyWake, qApplyspaceCharge, qOK, del_dr_z)
+
+
+! Subroutine to apply wakefeilds space charge or both
+
+
+implicit none
+
+real(kind=wp), intent(inout) :: sZ
+integer(kind=ip), intent(in) :: iwakefieldNthSteps, ispacechargeNthSteps
+integer(kind=ip), intent(in) :: iL
+logical, intent(in) :: qApplyWake, qApplyspaceCharge
+logical, intent(inout) :: qOK
+real(kind=wp) :: szl
+integer(kind=ip) :: nslices
+integer error
+real(kind=wp), intent(in) :: del_dr_z
+logical :: qOKL
+
+szl = del_dr_z
+
+if (fieldMesh == iTemporal) then
+  nslices=ceiling( (sLengthOfElmZ2_G*NZ2_G)/(4*pi*srho_g))
+else
+  nslices=ceiling( (sLengthOfElmZ2_G * real((NZ2_G-1_ip),kind=wp) )/(4*pi*srho_g)) ! + 30_ip
+end if
+
+zUndType_G = 'Drift'
+
+call ApplyEnergyshift(sZ, szl, iL, &
+                      iwakefieldNthSteps, ispacechargeNthSteps, &
+                      qApplyWake, &
+                      qApplyspaceCharge, nslices, qOK)
+
+
+
+end subroutine Energy_cho_drift
+
+
 
 end module dummyf

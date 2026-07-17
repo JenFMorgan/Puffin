@@ -86,7 +86,7 @@ logical :: qUseEmit_G
 
 integer(kind=ip) :: npts_I_G    !  Specifying mesh 4 current calculation
 
-real(kind=wp) :: dz2_I_G
+real(kind=wp) :: dz2_I_G 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! electron vars
@@ -208,7 +208,7 @@ real(kind=wp) :: sKBetaX_G, sKBetaY_G
 
 real(kind=wp) :: sKBetaXSF_G, sKBetaYSF_G
 
-
+real(kind=wp) :: unphi_G
 
 
 ! ****************************************************
@@ -217,14 +217,28 @@ real(kind=wp) :: sKBetaXSF_G, sKBetaYSF_G
 
 real(kind=wp), allocatable    :: zMod(:), mf(:), delmz(:), tapers(:), &
                                  ux_arr(:), uy_arr(:), &
-                                 kbnx_arr(:), kbny_arr(:) 
+                                 kbnx_arr(:), kbny_arr(:) , unphi_arr(:)
 
                                  
 character(32_ip), allocatable :: zundtype_arr(:)
 
 integer(kind=ip), allocatable :: nSteps_arr(:)
 
+type bfield_type
+  ! number of data points
+ ! integer(kind=ip) :: n 
+  ! data
+  real(kind=wp), allocatable :: x_Bf(:)
+  real(kind=wp), allocatable :: y_Bf(:)
+  real(kind=wp), allocatable :: z_Bf(:)
+  
+  real(kind=wp), allocatable :: Bx_f(:, :, :)
+  real(kind=wp), allocatable :: By_f(:, :, :)
+  real(kind=wp), allocatable :: Bz_f(:, :, :)
+end type Bfield_type
 
+type(bfield_type), allocatable :: Bfieldfile(:)
+type(bfield_type) ::  Bfieldfile_G 
 
 ! ****************************************************
 ! ****************************************************
@@ -251,6 +265,21 @@ real(kind=wp), allocatable    :: drift_zbar(:)
 real(kind=wp), allocatable    :: enmod_wavenum(:), enmod_mag(:)
 
 
+! ****************************************************
+! ****************************************************
+!     For lattice element type 'energy chirp'
+
+
+real(kind=wp), allocatable    :: LChirp_dgamma(:), LChirp_length(:), &
+                                 LChirp_start(:)
+
+! ****************************************************
+! ****************************************************
+!     For lattice element type 'energy chirp'
+
+
+real(kind=wp), allocatable    :: RMamp(:)
+
 
 ! ****************************************************
 ! ****************************************************
@@ -268,7 +297,7 @@ real(kind=wp), allocatable    :: quad_fx(:), quad_fy(:)
 
 
 
-integer(kind=ip) :: numOfUnds, numOfChics, numOfDrifts, numOfModulations, numOfQuads
+integer(kind=ip) :: numOfUnds, numOfChics, numOfDrifts, numOfModulations, numOfQuads, numofLChirp, numofRM
 
 
 
@@ -351,6 +380,9 @@ TYPE(cArraySegment), save :: tArrayZ
 
 integer(kind=ip) :: iWriteNthSteps, iIntWriteNthSteps
 
+integer(kind=ip) :: iwakefieldNthSteps, ispacechargeNthSteps
+real(kind=wp) :: icurrsamp
+
 
 character(132_ip) :: cmd_call_G
 character(1024_ip) :: zFileName_G, zBFile_G, zSFile_G
@@ -409,6 +441,10 @@ logical   ::  qPArrOK_G
 logical   ::  qInnerXYOK_G
 
 logical   ::  qscaled_G
+
+logical   :: qwake_G
+
+logical   :: qspacecharge_G
 
 logical   ::  qInitWrLat_G
 

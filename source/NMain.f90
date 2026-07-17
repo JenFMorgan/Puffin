@@ -84,16 +84,24 @@ do iL = iLst, modNum
 
   else if (iElmType(iL) == iDrift) then
 
-    call driftSection(iL, sZ)
+    call driftSection_top(iL, sZ)
 !     FOR WRITING AFTER EACH DRIFT
-!    szl = 0.0_wp
-!    call wr_cho(sZ, szl, &
-!                0_ip, iCsteps, modNum, iWriteNthSteps, &
-!                iIntWriteNthSteps, 0_ip, .true., .true., qOKL)
+    szl = 0.0_wp
+    call wr_cho(sZ, szl, &
+                0_ip, iCsteps, modNum, iWriteNthSteps, &
+                iIntWriteNthSteps, 0_ip, .true., .true., qOKL)
 
   else if (iElmType(iL) == iModulation) then
 
     call BModulation(iL)
+
+  else if (iElmType(iL) == iLChirp) then
+
+    call bLChirp(iL)
+
+  else if (iElmType(iL) == iRM) then 
+
+    call bRM(iL)
 
   end if
 

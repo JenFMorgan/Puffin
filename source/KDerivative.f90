@@ -72,7 +72,7 @@ contains
 
 
 !     Get RHS of field eqn and d/dz of electron variables
-
+   
     CALL getrhs(sz, &
                 sAr, sAi, &
                 sx, sy, sz2, &

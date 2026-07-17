@@ -24,6 +24,7 @@ use ParaField
 use InitDataType
 
 
+
 implicit none
 
 
@@ -70,6 +71,22 @@ contains
 
   call initUndulator(iUnd_cr, sZ, szl)
 
+ !   if (tProcInfo_G%qRoot) then
+ !         print*, 'root', 'B' ,size(Bfieldfile(iUnd_cr)%x_Bf)
+ !    else 
+ !         print*, 'otherroot', 'B', size(Bfieldfile(iUnd_cr)%x_Bf)
+ !    end if
+  
+  if (zUndType_G == 'Bfile') then
+    !if (tProcInfo_G%qRoot) then 
+    Bfieldfile_G = Bfieldfile(iUnd_cr) 
+    !print*, size(Bfieldfile_G%x_Bf) , 'size'
+    !end if
+  end if
+  
+  !Bfieldfile_G = Bfieldfile(iUnd_cr) 
+  !call castarray2all(Bfieldfile_G%x_Bf, 13, 0)
+
   if (qResume_G) then
 
     start_step = tInitData_G%iStep
@@ -88,7 +105,7 @@ contains
   end if
 
   qDiffrctd = .false.
-
+ 
   if (start_step==1_IP) then
 
     iCount = 0_IP
@@ -99,7 +116,7 @@ contains
 
   end if
 
-
+ 
   call getLocalFieldIndices(sRedistLen_G*2.0_wp)
 
 
@@ -111,7 +128,7 @@ contains
 ! if resuming, work out where we are on the diffraction part...
 ! will need to do first half step since writes are done on COMPLETED
 ! split-steps.
-
+!print*, sElY_G(1), 'undulator2'
 if (qresume_G) then
   if (qDiffraction_G) then
 
@@ -196,6 +213,7 @@ end if
 
       igoes = 1_ip
       do
+        
         call rk4par(sZl,sStepSize,qDiffrctd)
         if (igoes>3_ip) exit
         if (.not. qPArrOK_G) then
@@ -282,6 +300,7 @@ end if
                        iIntWriteNthSteps, nSteps, qOKL)   ! Write data
           if (dzdS > 0.0_wp) call diffractIM(dzdS, qDiffrctd, qOKL)  ! Start new diffraction step
           call outer2Inner(ac_rfield_in, ac_ifield_in)
+
           qDWrDone = .true.
 
         end if
@@ -304,12 +323,26 @@ end if
                      iStep, iCsteps, iM, iWriteNthSteps, &
                      iIntWriteNthSteps, nSteps, qOKL)
 
+                          
       else
 
       	qDWrDone = .false.  ! reset
 
       end if
 
+    end if
+
+
+    
+    if (qEshiftq(iStep, iCsteps, iwakefieldNthSteps, ispacechargeNthSteps, nSteps)) then
+
+
+        call EnergyshiftIM(sZ, sZl, &
+                          iStep, iCsteps, iM, iwakefieldNthSteps, & 
+                          ispacechargeNthSteps, &
+                           nSteps, qOKL)
+        
+                          
     end if
 
 
@@ -356,6 +389,44 @@ end if
   end if
 
 end subroutine UndSection
+
+
+subroutine driftSection_top(iL, sZ)
+
+  integer(kind=ip), intent(in) :: iL
+  real(kind=wp), intent(out) :: sZ
+
+  real(kind=wp) :: del_dr_z
+
+  real(kind=wp), allocatable :: sp2(:)
+  logical :: qDummy, qOKL
+  logical :: qApplyWake, qApplyspaceCharge
+
+  call driftSection(iL, sZ, del_dr_z)
+
+  qApplyWake = .false.
+  qApplyspaceCharge = .false.
+
+  if ( qspacecharge_G) then
+    
+    qApplyspaceCharge = .true.
+  
+  end if
+
+  if (qwake_G) then
+
+    qApplyWake = .true.
+
+ end if
+
+  if (qApplyspaceCharge .or. qApplyWake) then 
+    call Energy_cho_drift(sZ, &
+    iL, iwakefieldNthSteps, &
+    ispacechargeNthSteps, qApplyWake, qApplyspaceCharge, qOKL, del_dr_z)
+
+  end if
+end subroutine driftSection_top
+
 
 
 
