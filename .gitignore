@@ -17,3 +17,4 @@ source/Makefile
 source/cmake_install.cmake
 source/puffin
 *.mod
+*.h5

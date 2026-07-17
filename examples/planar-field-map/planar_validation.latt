@@ -1,0 +1,30 @@
+!------------------------------------------------------------
+! Validation of the external magnetic field implementation
+!
+! Uncomment ONE of the following undulator definitions.
+! Both should produce equivalent results.
+!------------------------------------------------------------
+
+! Built-in analytical planar undulator
+!UN 'planepole' 90 1.0 0.0 30 0.0 1.0 0.0 0.0
+
+! External magnetic field imported from HDF5
+
+UNF 'planar_validation.h5' 90 30
+
+
+! The parameter for the external magnetic feild identifier UNF
+
+! Name of the hdf5 file containing the field
+
+! Number of periods in the undulator. 
+
+! Number of intergration steps per period
+
+
+
+
+
+
+
+
