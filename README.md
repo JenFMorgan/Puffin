@@ -1,5 +1,22 @@
 # Puffin
 
+> ## This is a development fork
+>
+> This fork tracks ongoing extensions to Puffin, developed and maintained by
+> Jenny Morgan. It is **not an official University of Strathclyde release**.
+> The original Puffin code and README (below) are unchanged; full fork
+> details are in [FORK_NOTES.md](FORK_NOTES.md).
+>
+> - **`master`** mirrors the current upstream `UKFELs/Puffin`.
+> - **`fieldmap-old-layout`** contains this fork's current addition:
+>   arbitrary magnetic field import via HDF5 (`UNF` lattice element, trilinear
+>   interpolation). See `docs/external-field-map/notes.pdf` and
+>   `examples/planar-field-map/` for details and a worked example.
+> - Licensed under the same BSD 3-Clause terms as the original (see `LICENSE`).
+>
+> ---
+
+
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Build Status master](https://img.shields.io/travis/com/UKFELs/Puffin/master.svg?label=master)](https://travis-ci.com/UKFELs/Puffin/branches)
 [![Build Status dev](https://img.shields.io/travis/com/UKFELs/Puffin/dev.svg?label=dev)](https://travis-ci.com/UKFELs/Puffin/branches)
